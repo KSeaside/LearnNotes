@@ -9,6 +9,8 @@
 
 <a href="#title5">5.Redis 单线程如何处理那么多的并发客户端连接？</a>
 
+<a href="#title6">6.什么是I/O多路复用？</a>
+
 # <h2 id="title1">1.什么是Redis？它主要用来什么的？</h2>
 
     Redis，英文全称是Remote Dictionary Server（远程字典服务），
@@ -119,7 +121,24 @@ lrange mylist 0 -1   0左边第一个，-1右边第一个，（0-1表示获取�
     
     （4）每个集合可存储40多亿个成员。
 常用命令
+
 ```
+hset <key><field><value>给<key>集合中的  <field>键赋值<value>
+
+hget <key1><field>从<key1>集合<field>取出 value 
+
+hmset <key1><field1><value1><field2><value2>... 批量设置hash的值
+
+hexists<key1><field>查看哈希表 key 中，给定域 field 是否存在。 
+
+hkeys <key>列出该hash集合的所有field
+
+hvals <key>列出该hash集合的所有value
+
+hincrby <key><field><increment>为哈希表 key 中的域 field 的值加上增量 1   -1
+
+hsetnx <key><field><value>将哈希表 key 中的域 field 的值设置为 value ，当且仅当域 field 不存在
+
 ```
 应用场景
 
@@ -212,3 +231,26 @@ zrange <key><start><stop> [WITHSCORES]
 ![图片](redis1.png)
 
 
+# <h2 id="title6">6.什么是I/O多路复用？</h2>
+
+    🚀 I/O ：网络 I/O
+    🚀 多路 ：多个网络连接
+    🚀 复用：复用同一个线程。
+    🚀 IO多路复用其实就是一种同步IO模型，它实现了一个线程可以监视多个文件句柄；一旦某个文件句柄就绪，就能够通知应用程序进行相应的读写操作；而没有文件句柄就绪时,就会阻塞应用程序，交出cpu。
+
+单线程模型
+
+    Redis是单线程模型的，而单线程避免了CPU不必要的上下文切换和竞争锁的消耗。也正因为是单线程，
+    如果某个命令执行过长（如hgetall命令 返回哈希表中,所有的字段和值），会造成阻塞。Redis是面向快速执行场景的数据库，
+    所以要慎用如smembers（返回集合中的所有的成员）和lrange、hgetall等命令。
+    Redis 6.0 引入了多线程提速，它的执行命令操作内存的仍然是个单线程。
+
+虚拟内存机制
+
+    Redis直接自己构建了VM机制 ，不会像一般的系统会调用系统函数处理，会浪费一定的时间去移动和请求。
+
+Redis的虚拟内存机制是啥呢？
+
+    虚拟内存机制就是暂时把不经常访问的数据(冷数据)从内存交换到磁盘中，从而腾出宝贵的内存空间用于
+    其它需要访问的数据(热数据)。通过VM功能可以实现冷热数据分离，使热数据仍在内存中、冷数据保存到磁盘。
+    这样就可以避免因为内存不足而造成访问速度下降的问题。
