@@ -36,7 +36,7 @@
     然后，bgsave 子进程会把这个副本数据写入 RDB 文件，而在这个过程中，
     主线程仍然可以直接修改原来的数据。
 
-![图片](redis2.png)
+![图片](img/redis2.png)
 
 # AOF（append-only file）
 
@@ -63,7 +63,7 @@ $3
     # auto-aof-rewrite-min-size 64mb   //aof文件至少要达到64M才会自动重写，文件太小恢复速度本来就很快，重写的意义不大
     # auto-aof-rewrite-percentage 100  //aof文件自上一次重写后文件大小增长了100%则再次触发重写
 
-![图片](redis3.png)
+![图片](img/redis3.png)
 
 
 # <h2 id="title2">2.Redis 4.0 混合持久化</h2>
@@ -83,7 +83,7 @@ $3
     于是在 Redis 重启的时候，可以先加载 RDB 的内容，然后再重放增量 AOF 日志就可以完全替代之前的 AOF 全量文件重放，因此重启效率大幅得到提升。
 
 
-![图片](redis4.png)
+![图片](img/redis4.png)
 
 
 
@@ -96,17 +96,17 @@ $3
 
 # 
 # <h2 id="title4">4.Redis主从架构</h2>
-![图片](redis5.png)
+![图片](img/redis5.png)
 
 
 # <h2 id="title5">5.Redis主从工作原理</h2>
 
-![图片](redis6.png)
-![图片](redis7.png)
+![图片](img/redis6.png)
+![图片](img/redis7.png)
 
 # 
 # <h2 id="title6">6.Redis哨兵高可用架构</h2>
-![图片](redis8.png)
+![图片](img/redis8.png)
 
     sentinel哨兵是特殊的redis服务，不提供读写服务，主要用来监控redis实例节点。
     哨兵架构下client端第一次从哨兵找出redis的主节点，后续就直接访问redis的主节点，

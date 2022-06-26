@@ -170,7 +170,7 @@ hsetnx <key><field><value>将哈希表 key 中的域 field 的值设置为 value
     
     （2）跳跃表，跳跃表的目的在于给元素value排序，根据score的范围获取元素列表。
 
-![图片](redis10.png)
+![图片](img/redis10.png)
 
         🚀 跳表的特点:
         由许多层结构组成。
@@ -220,7 +220,7 @@ zrange <key><start><stop> [WITHSCORES]
     因为它所有的数据都在内存中，所有的运算都是内存级别的运算，而且单线程避免了
     多线程的切换性能损耗问题。正因为 Redis 是单线程，所以要小心使用 Redis 
     指令，对于那些耗时的指令(比如keys)，一定要谨慎使用，一不小心就可能会导致 Redis 卡顿。
-![图片](redis9.png)
+![图片](img/redis9.png)
 
 
 # <h2 id="title5">5.Redis 单线程如何处理那么多的并发客户端连接？</h2>
@@ -228,7 +228,7 @@ zrange <key><start><stop> [WITHSCORES]
     Redis的IO多路复用：redis利用epoll来实现IO多路复用，将连接信息和事件放到队列中，
     依次放到文件事件分派器，事件分派器将事件分发给事件处理器。
 
-![图片](redis1.png)
+![图片](img/redis1.png)
 
 
 # <h2 id="title6">6.什么是I/O多路复用？</h2>

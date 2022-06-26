@@ -27,7 +27,7 @@ if（jedis.set(key, uni_request_id, "NX", "EX", 100s) == 1）{
 # Redisson 原理
 
 
-![图片](redis17.png)
+![图片](img/redis17.png)
 
 
     只要线程一加锁成功，就会启动一个watch dog看门狗，它是一个后台线程，会每隔10秒检查一下，
@@ -40,7 +40,7 @@ if（jedis.set(key, uni_request_id, "NX", "EX", 100s) == 1）{
     Redis一般都是集群部署的，假设数据在主从同步过程，主节点挂了，
     Redis分布式锁可能会有哪些问题呢？一起来看些这个流程图：
 
-![图片](redis18.png)
+![图片](img/redis18.png)
 
 
     如果线程一在Redis的master节点上拿到了锁，但是加锁的key还没同步到slave节点。
@@ -58,7 +58,7 @@ Redlock核心思想是这样的：
     我们假设当前有5个Redis master节点，在5台服务器上面运行这些Redis实例。
 
 
-![图片](redis19.png)
+![图片](img/redis19.png)
 
 
 RedLock的实现步骤:如下
