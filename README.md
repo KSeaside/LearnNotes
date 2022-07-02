@@ -13,7 +13,7 @@
 
 [JVM类加载机制](Java/JVM/JVM类加载机制.md)
 
-JVM内存模型
+[JVM内存模型](Java/JVM/JVM内存模型.md)
 
 GC
 
