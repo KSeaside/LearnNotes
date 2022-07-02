@@ -15,7 +15,7 @@
 
 [JVM内存模型](Java/JVM/JVM内存模型.md)
 
-GC
+[GC](Java/JVM/GC.md)
 
 JVM调优工具及实战
 
