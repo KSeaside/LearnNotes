@@ -17,7 +17,7 @@
 
 [GC](Java/JVM/GC.md)
 
-JVM调优工具及实战
+[JVM调优工具](Java/JVM/JVM调优工具.md)
 
 
 
