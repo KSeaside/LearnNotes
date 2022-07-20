@@ -22,14 +22,13 @@
 
 ## JAVA多线程与并发
 
-### 理论基础
-
+[理论基础](Java/Java多线程与并发/理论基础.md)
 ### 线程基础
+[关键字: synchronized详解](Java/Java多线程与并发/关键字-synchronized详解.md)
 
-### 锁
 
-### 关键字: synchronized详解
-### 关键字: volatile详解
+[关键字: volatile详解](Java/Java多线程与并发/关键字-volatile详解.md)
+
 ### 关键字: final详解
 ### 关键字: synchronized详解
 
