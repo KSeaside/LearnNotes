@@ -241,16 +241,230 @@ private Segment<K,V> ensureSegment(int k) {
 总的来说，ensureSegment(int k) 比较简单，对于并发操作使用 CAS 进行控制。
 
 
-未完待续ing
+### 获取写入锁: scanAndLockForPut
+
+
+
+
+    前面我们看到，在往某个 segment 中 put 的时候，首先会调用 node = tryLock() ? null : scanAndLockForPut(key, hash, value)，
+    也就是说先进行一次 tryLock() 快速获取该 segment 的独占锁，如果失败，那么进入到 scanAndLockForPut 这个方法来获取锁。 
+    
+    下面我们来具体分析这个方法中是怎么控制加锁的。
+
+```java
+private HashEntry<K,V> scanAndLockForPut(K key, int hash, V value) {
+    HashEntry<K,V> first = entryForHash(this, hash);
+    HashEntry<K,V> e = first;
+    HashEntry<K,V> node = null;
+    int retries = -1; // negative while locating node
+
+    // 循环获取锁
+    while (!tryLock()) {
+        HashEntry<K,V> f; // to recheck first below
+        if (retries < 0) {
+            if (e == null) {
+                if (node == null) // speculatively create node
+                    // 进到这里说明数组该位置的链表是空的，没有任何元素
+                    // 当然，进到这里的另一个原因是 tryLock() 失败，所以该槽存在并发，不一定是该位置
+                    node = new HashEntry<K,V>(hash, key, value, null);
+                retries = 0;
+            }
+            else if (key.equals(e.key))
+                retries = 0;
+            else
+                // 顺着链表往下走
+                e = e.next;
+        }
+        // 重试次数如果超过 MAX_SCAN_RETRIES(单核1多核64)，那么不抢了，进入到阻塞队列等待锁
+        //    lock() 是阻塞方法，直到获取锁后返回
+        else if (++retries > MAX_SCAN_RETRIES) {
+            lock();
+            break;
+        }
+        else if ((retries & 1) == 0 &&
+                 // 这个时候是有大问题了，那就是有新的元素进到了链表，成为了新的表头
+                 //     所以这边的策略是，相当于重新走一遍这个 scanAndLockForPut 方法
+                 (f = entryForHash(this, hash)) != first) {
+            e = first = f; // re-traverse if entry changed
+            retries = -1;
+        }
+    }
+    return node;
+}
+
+
+```
+
+    
+    这个方法有两个出口，一个是 tryLock() 成功了，循环终止，另一个就是重试次数超过了 MAX_SCAN_RETRIES，进到 lock() 方法，此方法会阻塞等待，
+    直到成功拿到独占锁。 这个方法就是看似复杂，但是其实就是做了一件事，那就是获取该 segment 的独占锁，如果需要的话顺便实例化了一下 node。
+
+
+### 扩容: rehash
+
+
+
+    重复一下，segment 数组不能扩容，扩容是 segment 数组某个位置内部的数组 HashEntry<K,V>[] 进行扩容，扩容后，容量为原来的 2 倍。 
+    首先，我们要回顾一下触发扩容的地方，put 的时候，如果判断该值的插入会导致该 segment 的元素个数超过阈值，那么先进行扩容，再插值，
+    读者这个时候可以回去 put 方法看一眼。 
+    
+    该方法不需要考虑并发，因为到这里的时候，是持有该 segment 的独占锁的。
+
+
+```java
+// 方法参数上的 node 是这次扩容后，需要添加到新的数组中的数据。
+private void rehash(HashEntry<K,V> node) {
+    HashEntry<K,V>[] oldTable = table;
+    int oldCapacity = oldTable.length;
+    // 2 倍
+    int newCapacity = oldCapacity << 1;
+    threshold = (int)(newCapacity * loadFactor);
+    // 创建新数组
+    HashEntry<K,V>[] newTable =
+        (HashEntry<K,V>[]) new HashEntry[newCapacity];
+    // 新的掩码，如从 16 扩容到 32，那么 sizeMask 为 31，对应二进制 ‘000...00011111’
+    int sizeMask = newCapacity - 1;
+
+    // 遍历原数组，老套路，将原数组位置 i 处的链表拆分到 新数组位置 i 和 i+oldCap 两个位置
+    for (int i = 0; i < oldCapacity ; i++) {
+        // e 是链表的第一个元素
+        HashEntry<K,V> e = oldTable[i];
+        if (e != null) {
+            HashEntry<K,V> next = e.next;
+            // 计算应该放置在新数组中的位置，
+            // 假设原数组长度为 16，e 在 oldTable[3] 处，那么 idx 只可能是 3 或者是 3 + 16 = 19
+            int idx = e.hash & sizeMask;
+            if (next == null)   // 该位置处只有一个元素，那比较好办
+                newTable[idx] = e;
+            else { // Reuse consecutive sequence at same slot
+                // e 是链表表头
+                HashEntry<K,V> lastRun = e;
+                // idx 是当前链表的头节点 e 的新位置
+                int lastIdx = idx;
+
+                // 下面这个 for 循环会找到一个 lastRun 节点，这个节点之后的所有元素是将要放到一起的
+                for (HashEntry<K,V> last = next;
+                     last != null;
+                     last = last.next) {
+                    int k = last.hash & sizeMask;
+                    if (k != lastIdx) {
+                        lastIdx = k;
+                        lastRun = last;
+                    }
+                }
+                // 将 lastRun 及其之后的所有节点组成的这个链表放到 lastIdx 这个位置
+                newTable[lastIdx] = lastRun;
+                // 下面的操作是处理 lastRun 之前的节点，
+                //    这些节点可能分配在另一个链表中，也可能分配到上面的那个链表中
+                for (HashEntry<K,V> p = e; p != lastRun; p = p.next) {
+                    V v = p.value;
+                    int h = p.hash;
+                    int k = h & sizeMask;
+                    HashEntry<K,V> n = newTable[k];
+                    newTable[k] = new HashEntry<K,V>(h, p.key, v, n);
+                }
+            }
+        }
+    }
+    // 将新来的 node 放到新数组中刚刚的 两个链表之一 的 头部
+    int nodeIndex = node.hash & sizeMask; // add the new node
+    node.setNext(newTable[nodeIndex]);
+    newTable[nodeIndex] = node;
+    table = newTable;
+}
+
+
+```
+
+
+
+    这里的扩容比之前的 HashMap 要复杂一些，代码难懂一点。上面有两个挨着的 for 循环，第一个 for 有什么用呢? 
+    仔细一看发现，如果没有第一个 for 循环，也是可以工作的，但是，这个 for 循环下来，如果 lastRun 的后面还有比较多的节点，
+    那么这次就是值得的。因为我们只需要克隆 lastRun 前面的节点，后面的一串节点跟着 lastRun 走就是了，不需要做任何操作。
+    
+    我觉得 Doug Lea 的这个想法也是挺有意思的，不过比较坏的情况就是每次 lastRun 都是链表的最后一个元素或者很靠后的元素，
+    那么这次遍历就有点浪费了。不过 Doug Lea 也说了，根据统计，如果使用默认的阈值，大约只有 1/6 的节点需要克隆。
+
+
+### get 过程分析
+
+
+
+    相对于 put 来说，get 就很简单了。 
+    
+    计算 hash 值，找到 segment 数组中的具体位置，或我们前面用的“槽” 
+    槽中也是一个数组， 根据 hash 
+    找到数组中具体的位置 到这里是链表了，顺着链表进行查找即可
+
+
+```java
+
+public V get(Object key) {
+    Segment<K,V> s; // manually integrate access methods to reduce overhead
+    HashEntry<K,V>[] tab;
+    // 1. hash 值
+    int h = hash(key);
+    long u = (((h >>> segmentShift) & segmentMask) << SSHIFT) + SBASE;
+    // 2. 根据 hash 找到对应的 segment
+    if ((s = (Segment<K,V>)UNSAFE.getObjectVolatile(segments, u)) != null &&
+        (tab = s.table) != null) {
+        // 3. 找到segment 内部数组相应位置的链表，遍历
+        for (HashEntry<K,V> e = (HashEntry<K,V>) UNSAFE.getObjectVolatile
+                 (tab, ((long)(((tab.length - 1) & h)) << TSHIFT) + TBASE);
+             e != null; e = e.next) {
+            K k;
+            if ((k = e.key) == key || (e.hash == h && key.equals(k)))
+                return e.value;
+        }
+    }
+    return null;
+}
+
+
+```
+
+
+
+### 并发问题分析 
+
+现在我们已经说完了 put 过程和 get 过程，我们可以看到 get 过程中是没有加锁的，那自然我们就需要去考虑并发问题。 
+
+    添加节点的操作 put 和删除节点的操作 remove 都是要加 segment 上的独占锁的，所以它们之间自然不会有问题，我们需要考虑的问题就是 
+    get 的时候在同一个 segment 中发生了 put 或 remove 操作。
+
+put 操作的线程安全性
+
+    初始化槽，这个我们之前就说过了，使用了 CAS 来初始化 Segment 中的数组。 添加节点到链表的操作是插入到表头的，
+    所以，如果这个时候 get 操作在链表遍历的过程已经到了中间，是不会影响的。当然，另一个并发问题就是 get 操作
+    在 put 之后，需要保证刚刚插入表头的节点被读取，这个依赖于 setEntryAt 方法中使用的 UNSAFE.putOrderedObject。 
+    扩容。扩容是新创建了数组，然后进行迁移数据，最后面将 newTable 设置给属性 table。所以，如果 get 操作此时也在进行，
+    那么也没关系，如果 get 先行，那么就是在旧的 table 上做查询操作；而 put 先行，那么 put 操作的可见性保证就是
+    table 使用了 volatile 关键字。 
+
+
+remove 操作的线程安全性
+
+    get 操作需要遍历链表，但是 remove 操作会"破坏"链表。 如果 remove 破坏的节点 get 操作已经过去了，那么这里不存在任何问题。
+    如果 remove 先破坏了一个节点，分两种情况考虑。 
+    1、如果此节点是头节点，那么需要将头节点的 next 设置为数组该位置的元素，table 虽然使用了 volatile 修饰，但是 volatile 
+    并不能提供数组内部操作的可见性保证，所以源码中使用了 UNSAFE 来操作数组，请看方法 setEntryAt。
+    
+    2、如果要删除的节点不是头节点，它会将要删除节点的后继节点接到前驱节点中，这里的并发保证就是 next 属性是 volatile 的。
 
 
 
 
 
+## ConcurrentHashMap - JDK 1.8
 
 
 
+    在JDK1.7之前，ConcurrentHashMap是通过分段锁机制来实现的，所以其最大并发度受Segment的个数限制。
+    因此，在JDK1.8中，ConcurrentHashMap的实现原理摒弃了这种设计，而是选择了与HashMap类似的数组+链表+红黑树的方式实现，
+    而加锁则采用CAS和synchronized实现。
 
+
+![图片](img/J33.png)
 
 
 
