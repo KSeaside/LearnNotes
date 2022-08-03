@@ -57,6 +57,10 @@
 
 [MySQL基础](MySQL/MySQL基础.md)
 
+[深入理解Mysql事务隔离级别与锁机制](MySQL/深入理解Mysql事务隔离级别与锁机制.md)
+
+[一条SQL的执行过程](MySQL/一条SQL的执行过程.md)
+
 
 ### 一条SQL是如何运行的
 
