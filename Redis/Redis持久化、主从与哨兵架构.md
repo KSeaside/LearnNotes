@@ -102,6 +102,7 @@ $3
 # <h2 id="title5">5.Redis主从工作原理</h2>
 
 ![图片](img/redis6.png)
+
 ![图片](img/redis7.png)
 
 # 
